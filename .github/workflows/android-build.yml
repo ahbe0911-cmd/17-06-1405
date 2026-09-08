@@ -1,0 +1,112 @@
+name: Zaffran Gram Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+      - build-baseline
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug-apk:
+    name: Build afat debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out source and pinned submodules
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Free runner disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: false
+          android: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android command-line tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android and native build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gperf \
+            meson \
+            nasm \
+            ninja-build \
+            yasm
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "platform-tools" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+          rustup target add \
+            aarch64-linux-android \
+            armv7-linux-androideabi
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify credential-free source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "buildConfigField 'int', 'APP_ID', '0'" TMessagesProj/build.gradle
+          grep -Fq "buildConfigField 'String', 'APP_HASH', '\"\"'" TMessagesProj/build.gradle
+          test ! -e TMessagesProj/config/release.keystore
+          test ! -e TMessagesProj/config/test.keystore
+
+      - name: Build debug APK
+        shell: bash
+        env:
+          GRADLE_OPTS: >-
+            -Dorg.gradle.daemon=false
+            -Dorg.gradle.workers.max=2
+            -Dfile.encoding=UTF-8
+        run: |
+          set -euo pipefail
+          export NATIVE_DEPS_NDK_DIR="${ANDROID_SDK_ROOT}/ndk/27.2.12479018"
+          ./gradlew --no-daemon --stacktrace \
+            :TMessagesProj_App:assembleAfatDebug
+
+      - name: Record APK checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+          sha256sum TMessagesProj_App/build/outputs/apk/afat/debug/app.apk \
+            | tee TMessagesProj_App/build/outputs/apk/afat/debug/app.apk.sha256
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZaffranGram-debug
+          path: |
+            TMessagesProj_App/build/outputs/apk/afat/debug/app.apk
+            TMessagesProj_App/build/outputs/apk/afat/debug/app.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
