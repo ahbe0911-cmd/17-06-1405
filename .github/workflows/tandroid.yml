@@ -1,0 +1,25 @@
+name: Zaffran Gram Source Policy
+
+on:
+  # Release builds remain disabled during bootstrap. This check is manual and
+  # does not receive Telegram API credentials or signing material.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify credential-free source defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "buildConfigField 'int', 'APP_ID', '0'" TMessagesProj/build.gradle
+          grep -Fq "buildConfigField 'String', 'APP_HASH', '\"\"'" TMessagesProj/build.gradle
+          grep -Fq 'public static int APP_ID = 0;' TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+          grep -Fq 'public static String APP_HASH = "";' TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+          test ! -e TMessagesProj/config/release.keystore
+          test ! -e TMessagesProj/config/test.keystore

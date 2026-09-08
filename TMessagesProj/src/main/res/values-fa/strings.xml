@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ForkSettingsTitle">تنظیمات زعفران گرام</string>
+    <string name="AppName">زعفران گرام</string>
+    <string name="AppNameBeta">زعفران گرام آزمایشی</string>
+    <string name="AppNameFdroid">زعفران گرام</string>
+</resources>
